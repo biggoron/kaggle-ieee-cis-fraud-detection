@@ -4,7 +4,7 @@ from sklearn.metrics import roc_auc_score
 def train_eval_model(features):
     features.to_csv('interm_features.csv')
     cols = list(features.columns)
-    cols = [c for c in cols if c not in ['TransactionID', 'isFraud', 'TransactionDT']]
+    cols = [c for c in cols if c not in ['card1', 'TransactionID', 'isFraud', 'TransactionDT']]
     X_train = features[features.TransactionDT < 13000000][cols]
     Y_train = features[features.TransactionDT < 13000000]["isFraud"]
     X_val = features[features.TransactionDT >= 13000000][cols]
