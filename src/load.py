@@ -18,7 +18,7 @@ class BaseDataLoader(object):
             path = os.path.join(self.data_path, f)
             if ext == 'csv':
                 df = pd.read_csv(path)
-                df = self.convert_type(df, name)
+                df = self._convert_type(df, name)
                 df.to_pickle(path.split('.')[0] + '.pkl')
                 os.remove(path)
             elif ext == 'pkl':

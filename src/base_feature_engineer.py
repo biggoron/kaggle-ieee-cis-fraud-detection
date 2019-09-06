@@ -1,6 +1,9 @@
 import pickle
+import os
 
 import pandas as pd
+
+from settings import TMP_DIR
 
 class BaseFeatureEngineer(object):
     def __init__(self, list_transformers, skip=[], exclude=[]):
@@ -13,11 +16,11 @@ class BaseFeatureEngineer(object):
         self.skip = set(skip).union(self.exclude)
         self.state={}
 
-    def _load_state(self, filename='/home/dan/Projects/kaggle-ieee-cis-fraud-detection/tmp/features_state.pkl'):
+    def _load_state(self, filename=os.path.join(TMP_DIR, 'features_state.pkl')):
         filehandler = open(filename,"r")
         self.state = pickle.load(filehandler)
 
-    def _dump_state(self, filename='/home/dan/Projects/kaggle-ieee-cis-fraud-detection/tmp/features_state.pkl'):
+    def _dump_state(self, filename=os.path.join(TMP_DIR, 'features_state.pkl')):
         filehandler = open(filename,"wb")
         pickle.dump(self.state, filehandler)
 
@@ -28,12 +31,12 @@ class BaseFeatureEngineer(object):
                 print('skipping')
                 continue
             transformed_data = method(data, phase)
-            transformed_data.to_pickle(f"/home/dan/Projects/kaggle-ieee-cis-fraud-detection/tmp/{name}_{phase}.pkl")
+            transformed_data.to_pickle(os.path.join(TMP_DIR, f"{name}_{phase}.pkl"))
         data = data[[index_col]].set_index(index_col)
         for _, name, _ in self.list_transformers:
             if name in self.exclude:
                 continue
-            df = pd.read_pickle(f"/home/dan/Projects/kaggle-ieee-cis-fraud-detection/tmp/{name}_{phase}.pkl")
+            df = pd.read_pickle(os.path.join(TMP_DIR, f"{name}_{phase}.pkl"))
             data = data.merge(df, on=index_col, how='left')
         if phase == 'train':
             state = {'columns': data.columns}

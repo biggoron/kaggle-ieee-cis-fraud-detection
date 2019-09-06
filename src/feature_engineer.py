@@ -60,7 +60,6 @@ class FeatureEngineer(BaseFeatureEngineer):
 
     @staticmethod
     def _feat_1_trs_amt_scale(trs, phase):
-        print(trs.shape)
         df = trs[["TransactionID", "TransactionAmt"]].copy()
         df.loc[:, "amt_scale"] = np.round(np.log(df.TransactionAmt) * 10).astype(np.int8)
         df.drop(columns=["TransactionAmt"], inplace=True)
