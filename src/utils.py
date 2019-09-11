@@ -3,12 +3,12 @@ import logging
 
 def reduce_mem_usage(props):
     start_mem_usg = props.memory_usage().sum() / 1024**2
-    logging.info(f"Memory usage of properties dataframe is: {start_mem_usg}MB")
+    print(f"Memory usage of properties dataframe is: {start_mem_usg}MB")
     na_list = []
     for col in props.columns:
         if props[col].dtype == object:
             continue
-        logging.info(f"Previous type of column {col} props[col].dtype")
+        print(f"Previous type of column {col} props[col].dtype")
 
         is_int = False
         mx = props[col].max()
@@ -49,8 +49,8 @@ def reduce_mem_usage(props):
         else:
             props[col] = props[col].astype(np.float32)
 
-        logging.info(f"New type of column {col} props[col].dtype")
+        print(f"New type of column {col} {props[col].dtype}")
     end_mem_usg = props.memory_usage().sum() / 1024**2
-    logging.info(f"Memory usage of properties dataframe after optimisation is: {start_mem_usg}MB")
-    logging.info(f"This is {100 * end_mem_usg / start_mem_usg}% if the original size")
+    print(f"Memory usage of properties dataframe after optimisation is: {end_mem_usg}MB")
+    print(f"This is {100 * end_mem_usg / start_mem_usg}% if the original size")
     return props
