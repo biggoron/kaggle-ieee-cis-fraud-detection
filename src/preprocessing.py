@@ -1,10 +1,12 @@
 import pandas as pd
+import numpy as np
 from constants import \
     FIRST_NAN_GROUP, SECOND_NAN_GROUP, THIRD_NAN_GROUP, \
     FOURTH_NAN_GROUP, FIFTH_NAN_GROUP, SIXTH_NAN_GROUP, \
     SEVENTH_NAN_GROUP, EIGTH_NAN_GROUP, NINTH_NAN_GROUP, \
     ELEVENTH_NAN_GROUP, TWELVTH_NAN_GROUP, \
-    THIRTEENTH_NAN_GROUP , FOURTEENTH_NAN_GROUP, FIFTEENTH_NAN_GROUP 
+    THIRTEENTH_NAN_GROUP , FOURTEENTH_NAN_GROUP, FIFTEENTH_NAN_GROUP , \
+    EMAILS, US_EMAILS
 
 from sklearn.preprocessing import OneHotEncoder
 
@@ -37,6 +39,10 @@ class Preprocessor():
         df = Preprocessor.process_nan_cat_id(df)
         df = Preprocessor.process_nan_id_05_06(df)
         df = Preprocessor.process_nan_device(df)
+        bool_data = df.select_dtypes(include='bool')
+        for col in bool_data.columns:
+            df[col] = df[col].astype(np.int8)
+        del bool_data
         return df
 
     def fit_transform_cat(self, df):
@@ -53,6 +59,9 @@ class Preprocessor():
         cat_many_values_cols = [col for col in self.cats['cat_cols'] if df[col].nunique() > 7]
         self.cats['many_values'] = cat_many_values_cols
         for col in cat_many_values_cols:
+            print(col)
+            if col in ['P_emaildomain_suffix', 'R_emaildomain_suffix', 'P_emaildomain_bin', 'R_emaildomain_bin']:
+                continue
             subtable = df[['isFraud', col]].copy()
             mean = subtable.groupby(col).agg({'isFraud': 'mean'}).rename(columns={'isFraud': 'fraud_mean'})
             count = subtable.groupby(col).agg({'isFraud': 'count'}).rename(columns={'isFraud': 'sample_nb'})
@@ -76,6 +85,9 @@ class Preprocessor():
 
     def transform_cat(self, df):
         for col in self.cats['many_values']:
+            print(col)
+            if col in ['P_emaildomain_suffix', 'R_emaildomain_suffix', 'P_emaildomain_bin', 'R_emaildomain_bin']:
+                continue
             cat_dict = self.cats[col]
             missing_values = set(df[col].unique()).difference(set(list(cat_dict.keys())))
             default = self.cats[f'{col}_default']
@@ -84,12 +96,83 @@ class Preprocessor():
         df = pd.get_dummies(df, columns=self.cats['cat_cols'], prefix=self.cats['cat_cols'])
         return df
 
+    def transform_amount(self, df):
+        df.loc[:, "amt_round_1"] = np.where(df.TransactionAmt.mod(1) == 0, 1, 0).astype(np.int8)
+        df.loc[:, "amt_round_10"] = np.where(df.TransactionAmt.mod(10) == 0, 1, 0).astype(np.int8)
+        df.loc[:, "amt_round_100"] = np.where(df.TransactionAmt.mod(100) == 0, 1, 0).astype(np.int8)
+        return df
+
+    def add_new_features(self, data): 
+        data['uid'] = data['card1'].astype(str)+'_'+data['card2'].astype(str)
+        data['uid2'] = data['uid'].astype(str)+'_'+data['card3'].astype(str)+'_'+data['card5'].astype(str)
+        data['uid3'] = data['uid2'].astype(str)+'_'+data['addr1'].astype(str)+'_'+data['addr2'].astype(str)
+        
+        return data
+
+    def transform(self, train, test):
+        train = self.transform_amount(train)
+        test = self.transform_amount(test)
+
+        train = self.add_new_features(train)
+        test = self.add_new_features(test)
+
+        i_cols = ['card1','card2','card3','card5','uid','uid2','uid3']
+
+        for col in i_cols:
+            for agg_type in ['mean','std']:
+                new_col_name = col+'_TransactionAmt_'+agg_type
+                temp_df = pd.concat([train[[col, 'TransactionAmt']], test[[col,'TransactionAmt']]])
+                #temp_df['TransactionAmt'] = temp_df['TransactionAmt'].astype(int)
+                temp_df = temp_df.groupby([col])['TransactionAmt'].agg([agg_type]).reset_index().rename(
+                                                        columns={agg_type: new_col_name})
+                temp_df.index = list(temp_df[col])
+                temp_df = temp_df[new_col_name].to_dict()
+                train[new_col_name] = train[col].map(temp_df)
+                test[new_col_name]  = test[col].map(temp_df)
+
+        train = train.replace(np.inf,999)
+        test = test.replace(np.inf,999)
+
+        train['TransactionAmt'] = np.log1p(train['TransactionAmt'])
+        test['TransactionAmt'] = np.log1p(test['TransactionAmt'])
+
+        for c in ['P_emaildomain', 'R_emaildomain']:
+            train[c + '_bin'] = train[c].map(EMAILS)
+            test[c + '_bin'] = test[c].map(EMAILS)
+
+            train[c + '_suffix'] = train[c].map(lambda x: str(x).split('.')[-1])
+            test[c + '_suffix'] = test[c].map(lambda x: str(x).split('.')[-1])
+
+            train[c + '_suffix'] = train[c + '_suffix'].map(lambda x: x if str(x) not in US_EMAILS else 'us')
+            test[c + '_suffix'] = test[c + '_suffix'].map(lambda x: x if str(x) not in US_EMAILS else 'us')
+
+        p = 'P_emaildomain'
+        r = 'R_emaildomain'
+        uknown = 'email_not_provided'
+
+        def setDomain(df):
+            df[p] = df[p].fillna(uknown)
+            df[r] = df[r].fillna(uknown)
+            
+            # Check if P_emaildomain matches R_emaildomain
+            df['email_check'] = np.where((df[p]==df[r])&(df[p]!=uknown),1,0)
+
+            df[p+'_prefix'] = df[p].apply(lambda x: x.split('.')[0])
+            df[r+'_prefix'] = df[r].apply(lambda x: x.split('.')[0])
+            
+            return df
+            
+        train=setDomain(train)
+        test=setDomain(test)
+
+        return train, test
+
     @staticmethod
     def process_nan_first_group(df):
         df['first_group_nan'] = 1
         for col in FIRST_NAN_GROUP:
             df['first_group_nan'] = (df['first_group_nan'] & df[col].isna())
-            df[col] = df[col].fillna(df[col].mode()[0])
+            df[col] = df[col].fillna(-1)
         return df
 
     @staticmethod
@@ -97,7 +180,7 @@ class Preprocessor():
         df['second_group_nan'] = 1
         for col in SECOND_NAN_GROUP:
             df['second_group_nan'] = (df['second_group_nan'] & df[col].isna())
-            df[col] = df[col].fillna(df[col].mode()[0])
+            df[col] = df[col].fillna(-1)
         return df
 
     @staticmethod
@@ -105,7 +188,7 @@ class Preprocessor():
         df['third_group_nan'] = 1
         for col in THIRD_NAN_GROUP:
             df['third_group_nan'] = (df['third_group_nan'] & df[col].isna())
-            df[col] = df[col].fillna(df[col].mode()[0])
+            df[col] = df[col].fillna(-1)
         return df
 
     @staticmethod
@@ -113,7 +196,7 @@ class Preprocessor():
         df['fourth_group_nan'] = 1
         for col in FOURTH_NAN_GROUP:
             df['fourth_group_nan'] = (df['fourth_group_nan'] & df[col].isna())
-            df[col] = df[col].fillna(df[col].mode()[0])
+            df[col] = df[col].fillna(-1)
         return df
 
     @staticmethod
@@ -121,7 +204,7 @@ class Preprocessor():
         df['fifth_group_nan'] = 1
         for col in FIFTH_NAN_GROUP:
             df['fifth_group_nan'] = (df['fifth_group_nan'] & df[col].isna())
-            df[col] = df[col].fillna(df[col].mode()[0])
+            df[col] = df[col].fillna(-1)
         return df
 
     @staticmethod
@@ -129,7 +212,7 @@ class Preprocessor():
         df['sixth_group_nan'] = 1
         for col in SIXTH_NAN_GROUP:
             df['sixth_group_nan'] = (df['sixth_group_nan'] & df[col].isna())
-            df[col] = df[col].fillna(df[col].mode()[0])
+            df[col] = df[col].fillna(-1)
         return df
 
     @staticmethod
@@ -137,7 +220,7 @@ class Preprocessor():
         df['seventh_group_nan'] = 1
         for col in SEVENTH_NAN_GROUP:
             df['seventh_group_nan'] = (df['seventh_group_nan'] & df[col].isna())
-            df[col] = df[col].fillna(df[col].mode()[0])
+            df[col] = df[col].fillna(-1)
         return df
 
     @staticmethod
@@ -145,7 +228,7 @@ class Preprocessor():
         df['eigth_group_nan'] = 1
         for col in EIGTH_NAN_GROUP:
             df['eigth_group_nan'] = (df['eigth_group_nan'] & df[col].isna())
-            df[col] = df[col].fillna(df[col].mode()[0])
+            df[col] = df[col].fillna(-1)
         return df
 
     @staticmethod
@@ -153,7 +236,7 @@ class Preprocessor():
         df['ninth_group_nan'] = 1
         for col in NINTH_NAN_GROUP:
             df['ninth_group_nan'] = (df['ninth_group_nan'] & df[col].isna())
-            df[col] = df[col].fillna(df[col].mode()[0])
+            df[col] = df[col].fillna(-1)
         return df
 
     @staticmethod
@@ -203,7 +286,7 @@ class Preprocessor():
                 df[f'card_{i}'] = df[f'card{i}'].fillna('missing')
             else:
                 df[f'no_card_{i}'] = df[f'card{i}'].isna()
-                df[f'card{i}'] = df[f'card{i}'].fillna(df[f'card{i}'].mode()[0])
+                df[f'card{i}'] = df[f'card{i}'].fillna(-1)
         return df
 
     @staticmethod
