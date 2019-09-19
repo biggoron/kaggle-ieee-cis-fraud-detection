@@ -1,3 +1,4 @@
+import gc
 import pandas as pd
 import numpy as np
 from constants import \
@@ -164,6 +165,66 @@ class Preprocessor():
             
         train=setDomain(train)
         test=setDomain(test)
+
+        train["lastest_browser"] = np.zeros(train.shape[0])
+        test["lastest_browser"] = np.zeros(test.shape[0])
+
+        def setBrowser(df):
+            df.loc[df["id_31"]=="samsung browser 7.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="opera 53.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="mobile safari 10.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="google search application 49.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="firefox 60.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="edge 17.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 69.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 67.0 for android",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 63.0 for android",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 63.0 for ios",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 64.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 64.0 for android",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 64.0 for ios",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 65.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 65.0 for android",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 65.0 for ios",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 66.0",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 66.0 for android",'lastest_browser']=1
+            df.loc[df["id_31"]=="chrome 66.0 for ios",'lastest_browser']=1
+            return df
+
+        train=setBrowser(train)
+        test=setBrowser(test)
+
+        def setDevice(df):
+            df['DeviceInfo'] = df['DeviceInfo'].fillna('unknown_device').str.lower()
+            
+            df['device_name'] = df['DeviceInfo'].str.split('/', expand=True)[0]
+
+            df.loc[df['device_name'].str.contains('SM', na=False), 'device_name'] = 'Samsung'
+            df.loc[df['device_name'].str.contains('SAMSUNG', na=False), 'device_name'] = 'Samsung'
+            df.loc[df['device_name'].str.contains('GT-', na=False), 'device_name'] = 'Samsung'
+            df.loc[df['device_name'].str.contains('Moto G', na=False), 'device_name'] = 'Motorola'
+            df.loc[df['device_name'].str.contains('Moto', na=False), 'device_name'] = 'Motorola'
+            df.loc[df['device_name'].str.contains('moto', na=False), 'device_name'] = 'Motorola'
+            df.loc[df['device_name'].str.contains('LG-', na=False), 'device_name'] = 'LG'
+            df.loc[df['device_name'].str.contains('rv:', na=False), 'device_name'] = 'RV'
+            df.loc[df['device_name'].str.contains('HUAWEI', na=False), 'device_name'] = 'Huawei'
+            df.loc[df['device_name'].str.contains('ALE-', na=False), 'device_name'] = 'Huawei'
+            df.loc[df['device_name'].str.contains('-L', na=False), 'device_name'] = 'Huawei'
+            df.loc[df['device_name'].str.contains('Blade', na=False), 'device_name'] = 'ZTE'
+            df.loc[df['device_name'].str.contains('BLADE', na=False), 'device_name'] = 'ZTE'
+            df.loc[df['device_name'].str.contains('Linux', na=False), 'device_name'] = 'Linux'
+            df.loc[df['device_name'].str.contains('XT', na=False), 'device_name'] = 'Sony'
+            df.loc[df['device_name'].str.contains('HTC', na=False), 'device_name'] = 'HTC'
+            df.loc[df['device_name'].str.contains('ASUS', na=False), 'device_name'] = 'Asus'
+
+            df.loc[df.device_name.isin(df.device_name.value_counts()[df.device_name.value_counts() < 200].index), 'device_name'] = "Others"
+            df['had_id'] = 1
+            gc.collect()
+            
+            return df
+
+        train=setDevice(train)
+        test=setDevice(test)
 
         return train, test
 
